@@ -10,6 +10,9 @@ trait HasParent
 {
     public $hasParent = true;
 
+    /**
+     *
+     */
     public static function bootHasParent()
     {
         // This adds support for using Parental with standalone Eloquent, outside a normal Laravel app.
@@ -20,7 +23,9 @@ trait HasParent
         static::creating(function ($model) {
             if ($model->parentHasHasChildrenTrait()) {
                 $model->forceFill(
-                    [$model->getInheritanceColumn() => $model->classToAlias(get_class($model))]
+
+                    $model->getParentalAttributes()
+
                 );
             }
         });
@@ -29,9 +34,24 @@ trait HasParent
             $instance = new static;
 
             if ($instance->parentHasHasChildrenTrait()) {
-                $query->where($instance->getTable().'.'.$instance->getInheritanceColumn(), $instance->classToAlias(get_class($instance)));
+
+                foreach ($instance->getParentalAttributes() as $attributeName => $attributeValue) {
+                    $query->where($instance->getTable() . '.' . $attributeName, $attributeValue);
+                }
+
             }
         });
+    }
+
+    /**
+     * Override this for custom design
+     * @return array array of field_name => field_value
+     */
+    protected function getParentalAttributes()
+    {
+        return [
+            $this->getInheritanceColumn() => $this->classToAlias(get_class($this))
+        ];
     }
 
     /**
@@ -43,7 +63,7 @@ trait HasParent
     }
 
     /**
-     * @return string
+     * @return mixed
      * @throws \ReflectionException
      */
     public function getTable()
@@ -97,7 +117,6 @@ trait HasParent
 
     /**
      * Get the class name for polymorphic relations.
-     *
      * @return string
      * @throws \ReflectionException
      */
@@ -113,7 +132,6 @@ trait HasParent
 
     /**
      * Get the class name for Parent Class.
-     *
      * @return string
      * @throws \ReflectionException
      */

@@ -2,6 +2,10 @@
 
 namespace Parental;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 trait HasChildren
@@ -10,6 +14,34 @@ trait HasChildren
 
     protected $hasChildren = true;
 
+    /**
+     *
+     */
+    public static function bootHasChildren()
+    {
+
+        static::addGlobalScope(function (Builder $builder) {
+
+            if (property_exists(get_called_class(), 'requiredByParental')) {
+
+                if (!is_null($builder->getQuery()->columns)) {
+
+                    //columns specified
+                    $builder->addSelect(static::$requiredByParental);
+
+                }
+
+
+            }
+
+        });
+
+    }
+
+    /**
+     * @param $event
+     * @param $callback
+     */
     protected static function registerModelEvent($event, $callback)
     {
         parent::registerModelEvent($event, $callback);
@@ -17,7 +49,7 @@ trait HasChildren
         if (static::class === self::class && property_exists(self::class, 'childTypes')) {
             // We don't want to register the callbacks that happen in the boot method of the parent, as they'll be called
             // from the child's boot method as well.
-            if (! self::parentIsBooting()) {
+            if (!self::parentIsBooting()) {
                 foreach ((new self)->childTypes as $childClass) {
                     if ($childClass !== self::class) {
                         $childClass::registerModelEvent($event, $callback);
@@ -27,13 +59,16 @@ trait HasChildren
         }
     }
 
+    /**
+     * @return bool
+     */
     protected static function parentIsBooting()
     {
-        if (! isset(self::$parentBootMethods)) {
+        if (!isset(self::$parentBootMethods)) {
             self::$parentBootMethods[] = 'boot';
 
             foreach (class_uses_recursive(self::class) as $trait) {
-                self::$parentBootMethods[] = 'boot'.class_basename($trait);
+                self::$parentBootMethods[] = 'boot' . class_basename($trait);
             }
 
             self::$parentBootMethods = array_flip(self::$parentBootMethods);
@@ -54,13 +89,11 @@ trait HasChildren
     /**
      * @param array $attributes
      * @param bool $exists
-     * @return $this
+     * @return mixed
      */
     public function newInstance($attributes = [], $exists = false)
     {
-        $model = isset($attributes[$this->getInheritanceColumn()])
-            ? $this->getChildModel($attributes)
-            : new static(((array) $attributes));
+        $model = $this->getChildModel($attributes);
 
         $model->exists = $exists;
 
@@ -91,6 +124,7 @@ trait HasChildren
 
         $model->setRawAttributes($attributes, true);
 
+
         $model->setConnection($connection ?: $this->getConnectionName());
 
         $model->fireModelEvent('retrieved', false);
@@ -112,7 +146,7 @@ trait HasChildren
         $instance = $this->newRelatedInstance($related);
 
         if (is_null($foreignKey) && $instance->hasParent) {
-            $foreignKey = Str::snake($instance->getClassNameForRelationships()).'_'.$instance->getKeyName();
+            $foreignKey = Str::snake($instance->getClassNameForRelationships()) . '_' . $instance->getKeyName();
         }
 
         if (is_null($relation)) {
@@ -175,21 +209,36 @@ trait HasChildren
     }
 
     /**
+     * Override this in order to get the custom class in a custom way, not reading the InheritanceColumn attribute
+     * @param array $attributes
+     * @return mixed
+     */
+    public function getChildClass(array $attributes)
+    {
+
+        if (!isset($attributes[$this->getInheritanceColumn()])) {
+            return static::class;
+        };
+
+        return $this->classFromAlias(
+            $attributes[$this->getInheritanceColumn()]
+        );
+    }
+
+    /**
      * @param array $attributes
      * @return mixed
      */
     protected function getChildModel(array $attributes)
     {
-        $className = $this->classFromAlias(
-            $attributes[$this->getInheritanceColumn()]
-        );
+        $className = $this->getChildClass($attributes);
 
         return new $className((array)$attributes);
     }
 
     /**
      * @param $aliasOrClass
-     * @return string
+     * @return mixed
      */
     public function classFromAlias($aliasOrClass)
     {
@@ -204,7 +253,7 @@ trait HasChildren
 
     /**
      * @param $className
-     * @return string
+     * @return false|int|string
      */
     public function classToAlias($className)
     {
@@ -224,4 +273,5 @@ trait HasChildren
     {
         return property_exists($this, 'childTypes') ? $this->childTypes : [];
     }
+
 }
