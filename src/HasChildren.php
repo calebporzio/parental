@@ -181,7 +181,7 @@ trait HasChildren
     protected function getChildModel(array $attributes)
     {
         $className = $this->classFromAlias(
-            $attributes[$this->getInheritanceColumn()]
+            $attributes[$this->getInheritanceColumn()]->value ?? $attributes[$this->getInheritanceColumn()]
         );
 
         return new $className((array)$attributes);
